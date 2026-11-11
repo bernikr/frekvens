@@ -1,0 +1,68 @@
+esphome:
+  name: frekvens
+  platformio_options:
+    lib_deps:
+      - Wire                            # Also required by GFX.
+      - SPI                             # Also required by GFX.
+      - adafruit/Adafruit BusIO         # Required by GFX Library.
+      - adafruit/Adafruit GFX Library   # Required for FrekvensPanel.
+      - me-no-dev/ESPAsyncTCP
+
+esp32:
+  board: az-delivery-devkit-v4
+
+external_components:
+  - source: github://nagyrobi/esphome-ikea-led-matrix@master
+    components: [ frekvens_panel ]
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "vV6/h0AjePuR0fG3NbF2Bc+iL6xzbYyGUje4xFiLCRk="
+
+ota:
+  platform: esphome
+  password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  domain: .lan
+
+esp32_ble_tracker:
+bluetooth_proxy:
+  active: True
+
+####################
+
+output:
+  - platform: ledc
+    pin:
+      number: 26
+      inverted: True
+    id: enable
+
+light:
+  - platform: monochromatic
+    output: enable
+    id: enable_light
+    name: Led Matrix
+
+display:
+  - platform: frekvens_panel
+    data_pin: 27
+    clock_pin: 14
+    latch_pin: 19
+#    id: led_matrix_display
+#    #update_interval: 16ms
+#    pages:
+#      - id: p_text
+#        lambda: |-
+#          it.print(id(coords), -2, id(default_font), COLOR_ON, id(scroll_text).state.c_str());
+      #- id: p_loading
+      #  lambda: |-
+      #    it.image(0, 0, id(gif_loading), COLOR_ON, COLOR_OFF);
