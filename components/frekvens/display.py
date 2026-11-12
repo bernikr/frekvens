@@ -1,6 +1,6 @@
 from esphome import automation, pins
 import esphome.codegen as cg
-from esphome.components import display
+from esphome.components import display, output
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BRIGHTNESS,
@@ -15,6 +15,7 @@ from . import frekvens_ns
 CONF_LATCH_PIN = "latch_pin"
 CONF_ENABLE_PIN = "enable_pin"
 CONF_ENABLE_PIN_INVERTED = "enable_pin_inverted"
+CONF_ENABLE_OUTPUT = "enable_output"
 CONF_CLOCK_SPEED = "clock_speed"
 
 DEFAULT_CLOCK_SPEED = 10_000_000
@@ -24,7 +25,14 @@ FrekvensSetBrightnessAction = frekvens_ns.class_(
     "FrekvensSetBrightnessAction", automation.Action, cg.Parented.template(FrekvensDisplay)
 )
 
-CONFIG_SCHEMA = display.FULL_DISPLAY_SCHEMA.extend(
+def validate_enable(config):
+    if CONF_ENABLE_PIN in config and CONF_ENABLE_OUTPUT in config:
+        raise cv.Invalid(f"Use either '{CONF_ENABLE_PIN}' or '{CONF_ENABLE_OUTPUT}', not both")
+    return config
+
+
+CONFIG_SCHEMA = cv.All(
+    display.FULL_DISPLAY_SCHEMA.extend(
     {
         cv.GenerateID(): cv.declare_id(FrekvensDisplay),
         cv.Required(CONF_DATA_PIN): pins.internal_gpio_output_pin_number,
@@ -32,6 +40,9 @@ CONFIG_SCHEMA = display.FULL_DISPLAY_SCHEMA.extend(
         cv.Required(CONF_LATCH_PIN): pins.internal_gpio_output_pin_number,
         cv.Optional(CONF_ENABLE_PIN): pins.internal_gpio_output_pin_number,
         cv.Optional(CONF_ENABLE_PIN_INVERTED, default=True): cv.boolean,
+        # Hardware dimming via the OE pin: preserves the full BAM grayscale
+        # resolution at any brightness.
+        cv.Optional(CONF_ENABLE_OUTPUT): cv.use_id(output.FloatOutput),
         cv.Optional(CONF_CLOCK_SPEED, default=DEFAULT_CLOCK_SPEED): cv.int_range(
             min=1_000_000, max=25_000_000
         ),
@@ -39,6 +50,8 @@ CONFIG_SCHEMA = display.FULL_DISPLAY_SCHEMA.extend(
         # does not interfere with the panel refresh rate.
         cv.Optional(CONF_BRIGHTNESS, default=1.0): cv.percentage,
     }
+    ),
+    validate_enable,
 )
 
 
@@ -54,6 +67,10 @@ async def to_code(config):
     if CONF_ENABLE_PIN in config:
         cg.add(var.set_enable_pin(config[CONF_ENABLE_PIN]))
         cg.add(var.set_enable_pin_inverted(config[CONF_ENABLE_PIN_INVERTED]))
+
+    if CONF_ENABLE_OUTPUT in config:
+        out = await cg.get_variable(config[CONF_ENABLE_OUTPUT])
+        cg.add(var.set_enable_output(out))
 
     cg.add(var.set_brightness(config[CONF_BRIGHTNESS]))
 

@@ -8,6 +8,7 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/components/display/display_buffer.h"
+#include "esphome/components/output/float_output.h"
 
 #include "driver/gpio.h"
 #include "driver/gptimer.h"
@@ -43,6 +44,7 @@ class FrekvensDisplay final : public display::DisplayBuffer {
   void set_enable_pin(uint8_t pin) { this->enable_pin_ = pin; }
   void set_enable_pin_inverted(bool inverted) { this->enable_pin_inverted_ = inverted; }
   void set_clock_speed(uint32_t hz) { this->clock_speed_ = hz; }
+  void set_enable_output(output::FloatOutput *output) { this->enable_output_ = output; }
   void set_brightness(float brightness);
 
   /// Stop the BAM timer and the panel output (used while OTA writes flash).
@@ -68,7 +70,7 @@ class FrekvensDisplay final : public display::DisplayBuffer {
 
   void encode_frame_();
   void swap_buffers_();
-  void update_enable_pin_();
+  void update_enable_output_();
 
   static void display_task_(void *arg);
   static bool IRAM_ATTR bam_isr_(gptimer_handle_t timer,
@@ -79,6 +81,7 @@ class FrekvensDisplay final : public display::DisplayBuffer {
   uint8_t latch_pin_{0};
   uint8_t enable_pin_{0xFF};
   bool enable_pin_inverted_{true};
+  output::FloatOutput *enable_output_{nullptr};
   uint32_t clock_speed_{10'000'000};
 
   float brightness_{1.0f};

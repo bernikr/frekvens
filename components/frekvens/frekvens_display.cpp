@@ -42,7 +42,7 @@ void FrekvensDisplay::setup() {
   }
   gpio_set_level(static_cast<gpio_num_t>(this->latch_pin_), 0);
 
-  if (this->enable_pin_ != 0xFF) {
+  if (this->enable_pin_ != 0xFF && this->enable_output_ == nullptr) {
     io_conf.pin_bit_mask = 1ULL << this->enable_pin_;
     if (gpio_config(&io_conf) != ESP_OK) {
       ESP_LOGE(TAG, "Failed to configure the enable pin");
@@ -151,7 +151,7 @@ void FrekvensDisplay::setup() {
     return;
   }
 
-  this->update_enable_pin_();
+  this->update_enable_output_();
   const uint32_t frame_rate = 1'000'000u / (BASE_TICK_US * 254u);
   ESP_LOGI(TAG, "Frekvens panel started (SPI %u Hz, %u bit BAM, %u Hz frame rate)",
            static_cast<unsigned>(this->clock_speed_), static_cast<unsigned>(BAM_BITS),
@@ -170,7 +170,8 @@ void FrekvensDisplay::dump_config() {
     ESP_LOGCONFIG(TAG, "  Enable pin: not configured");
   }
   ESP_LOGCONFIG(TAG, "  Clock speed: %u Hz", static_cast<uint32_t>(this->clock_speed_));
-  ESP_LOGCONFIG(TAG, "  Brightness: %.0f%%", this->brightness_ * 100.0f);
+  ESP_LOGCONFIG(TAG, "  Brightness: %.0f%% (%s)", this->brightness_ * 100.0f,
+                this->enable_output_ != nullptr ? "OE PWM" : "software");
   ESP_LOGCONFIG(TAG, "  BAM bit depth: %u", static_cast<unsigned>(BAM_BITS));
   const uint32_t frame_rate = 1'000'000u / (BASE_TICK_US * 254u);
   ESP_LOGCONFIG(TAG, "  Frame rate: %u Hz", static_cast<unsigned>(frame_rate));
@@ -184,7 +185,11 @@ void FrekvensDisplay::loop() {
 
   if (this->brightness_dirty_) {
     this->brightness_dirty_ = false;
-    this->update();
+    if (this->enable_output_ != nullptr) {
+      this->update_enable_output_();
+    } else {
+      this->update();
+    }
   }
 
   const uint32_t now = millis();
@@ -235,10 +240,7 @@ void FrekvensDisplay::suspend() {
   }
   this->suspended_ = true;
   gptimer_stop(this->timer_);
-  if (this->enable_pin_ != 0xFF) {
-    // Force the output-enable line to its inactive level.
-    gpio_set_level(static_cast<gpio_num_t>(this->enable_pin_), this->enable_pin_inverted_ ? 1 : 0);
-  }
+  this->update_enable_output_();
   ESP_LOGD(TAG, "BAM suspended");
 }
 
@@ -258,7 +260,7 @@ void FrekvensDisplay::resume() {
 
   gptimer_set_raw_count(this->timer_, 0);
   gptimer_start(this->timer_);
-  this->update_enable_pin_();
+  this->update_enable_output_();
   ESP_LOGD(TAG, "BAM resumed");
 }
 
@@ -279,21 +281,23 @@ void FrekvensDisplay::update() {
 
 void FrekvensDisplay::set_brightness(float brightness) {
   brightness = std::clamp(brightness, 0.0f, 1.0f);
-  const auto scaled = static_cast<uint8_t>(std::lround(brightness * 255.0f));
-  if (scaled == this->brightness_255_) {
+  if (std::fabs(brightness - this->brightness_) < 0.001f) {
     return;
   }
   this->brightness_ = brightness;
-  this->brightness_255_ = scaled;
+  this->brightness_255_ = static_cast<uint8_t>(std::lround(brightness * 255.0f));
   this->brightness_dirty_ = true;
-  this->update_enable_pin_();
 }
 
-void FrekvensDisplay::update_enable_pin_() {
+void FrekvensDisplay::update_enable_output_() {
+  if (this->enable_output_ != nullptr) {
+    this->enable_output_->set_level(this->suspended_ ? 0.0f : this->brightness_);
+    return;
+  }
   if (this->enable_pin_ == 0xFF) {
     return;
   }
-  const bool on = this->brightness_255_ > 0;
+  const bool on = this->brightness_255_ > 0 && !this->suspended_;
   const int level = this->enable_pin_inverted_ ? (on ? 0 : 1) : (on ? 1 : 0);
   gpio_set_level(static_cast<gpio_num_t>(this->enable_pin_), level);
 }
@@ -316,16 +320,11 @@ void FrekvensDisplay::encode_frame_() {
   const uint8_t back = this->back_.load(std::memory_order_relaxed);
   std::memset(this->bitplanes_[back], 0, sizeof(this->bitplanes_[back]));
 
-  // Each shift-register word drives one physical column of the panel, and each
-  // bit of that word drives one row. The columns are wired in pairs; this table
-  // was measured against the real panel (left-to-right physical column order).
-  static const uint8_t COLUMN_ORDER[PANEL_SIZE] = {7, 15, 6, 14, 5, 13, 4, 12,
-                                                   3, 11, 2, 10, 1, 9, 0, 8};
 
   for (int y = 0; y < PANEL_SIZE; y++) {
     for (int x = 0; x < PANEL_SIZE; x++) {
       uint8_t value = this->buffer_[y * PANEL_SIZE + x];
-      if (this->brightness_255_ != 255) {
+      if (this->enable_output_ == nullptr && this->brightness_255_ != 255) {
         value = esp_scale8(value, this->brightness_255_);
       }
       if (value == 0) {
@@ -336,14 +335,18 @@ void FrekvensDisplay::encode_frame_() {
         continue;
       }
 
-      // The panel is mounted on its feet, so the default orientation rotates
-      // the logical image 90 degrees clockwise. Display coordinates remain the
-      // standard top-left origin; the ESPHome `rotation:` option can still be
-      // used for additional adjustments.
-      const int physical_x = PANEL_SIZE - 1 - y;
-      const int physical_y = x;
-      const uint8_t word = COLUMN_ORDER[physical_x];
-      const uint8_t bit = static_cast<uint8_t>(physical_y);
+      // The panel is wired in four 8x8 quadrants. Each 16-bit word drives two
+      // consecutive rows of one 8-column half; the two 8-column halves of a
+      // logical row are in different words.
+      int word = y >> 1;
+      int bit = x & 0x7;
+      if (y & 1) {
+        bit += 8;
+      }
+      // x < 8 is the left half, x >= 8 the right half.
+      if ((x & 0x8) != 0) {
+        word += 8;
+      }
       const uint16_t pixel_mask = static_cast<uint16_t>(1u << bit);
       for (int plane = 0; plane < BAM_BITS; plane++) {
         if (value & (1u << plane)) {

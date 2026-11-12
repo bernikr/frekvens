@@ -56,17 +56,26 @@ external_components:
       path: components
     components: [frekvens]
 
+# Hardware dimming on the SCT2024 output-enable pin. This preserves the full
+# 7-bit BAM grayscale at any brightness level.
+output:
+  - platform: ledc
+    pin:
+      number: GPIO26
+      inverted: true
+    frequency: 20kHz
+    id: panel_enable
+
 display:
   - platform: frekvens
     id: frekvens_panel
     data_pin: GPIO27
     clock_pin: GPIO14
     latch_pin: GPIO19
-    enable_pin: GPIO26
+    enable_output: panel_enable
     clock_speed: 25000000
-    # Boot with the panel off; the Brightness number controls it at runtime.
-    # Brightness is applied to the pixel values before BAM, so the refresh rate
-    # stays constant.
+    # Boot with the panel off; the Brightness number controls the OE PWM duty.
+    # Dimming does not reduce the grayscale resolution.
     brightness: 0%
     update_interval: 33ms
     lambda: |-
@@ -187,25 +196,25 @@ display:
           break;
 
         case 9:  // Physical columns, left to right
-          // The default orientation is rotated 90 degrees clockwise, so a
-          // logical row appears as one physical column.
-          {
-            int step = static_cast<int>(t * 2.0f) % 16;
-            int logical_y = 15 - step;
-            for (int x = 0; x < 16; x++) {
-              it.draw_pixel_at(x, logical_y, Color(0, 0, 0, 255));
-            }
-          }
-          break;
-
-        case 10:  // Physical rows, top to bottom
-          // A logical column appears as one physical row after the rotation.
           {
             int step = static_cast<int>(t * 2.0f) % 16;
             for (int y = 0; y < 16; y++) {
               it.draw_pixel_at(step, y, Color(0, 0, 0, 255));
             }
           }
+          break;
+
+        case 10:  // Physical rows, top to bottom
+          {
+            int step = static_cast<int>(t * 2.0f) % 16;
+            for (int x = 0; x < 16; x++) {
+              it.draw_pixel_at(x, step, Color(0, 0, 0, 255));
+            }
+          }
+          break;
+
+        case 11:  // Origin test: only the logical top-left pixel
+          it.draw_pixel_at(0, 0, Color(0, 0, 0, 255));
           break;
 
         default:  // Off
@@ -231,6 +240,7 @@ select:
       - "Warp starfield"
       - "Column scan"
       - "Row scan"
+      - "Top-left pixel"
 
 number:
   - platform: template

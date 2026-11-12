@@ -52,15 +52,12 @@ preempt a cache-off flash operation, which trips the task watchdog. The
 | Latch (LA) | 19 | SCT2024 latch, active/transparent high |
 | Enable (OE) | 26 | Active low; optional but recommended |
 
-The panel is wired **per column**: each of the 16 SCT2024 drivers drives one
-16-row column, and bit 0…15 of that driver maps to rows top to bottom. The driver
-order is interleaved in adjacent pairs, so the component uses the measured
-left-to-right column order `7, 15, 6, 14, 5, 13, 4, 12, 3, 11, 2, 10, 1, 9, 0, 8`.
-This is different from the old quadrant/row-based mapping, which produced a
-half-swapped image. The default orientation assumes the panel is **standing on
-its feet** and applies a **90° clockwise** rotation in the mapping. The logical
-display is 16×16; the standard `rotation:` option can still be used for
-additional adjustments.
+The panel's 16 shift-register words are wired as **2-row × 8-column blocks**
+(four 8×8 quadrants). Each word drives two rows of one 8-column half, and the two
+8-column halves of a logical row live in different words. The component uses the
+original mapping from the working black/white driver; the logical display is
+16×16 and upright by default. The standard `rotation:` option can still be used
+for additional adjustments.
 
 ## Configuration
 
@@ -100,10 +97,11 @@ Options:
 | Option | Default | Description |
 | :--- | :--- | :--- |
 | `data_pin`, `clock_pin`, `latch_pin` | required | Panel control pins. |
-| `enable_pin` | none | Active-low LED output enable. Kept off while suspended. |
+| `enable_output` | none | `output:` used for hardware dimming on the OE pin (recommended). Keeps all 128 gray levels at any brightness. |
+| `enable_pin` | none | Plain GPIO enable/power gate. Without `enable_output`, brightness scales the pixel values (lossy at low levels). |
 | `enable_pin_inverted` | `true` | Set to `false` for an active-high enable. |
 | `clock_speed` | `10000000` | SPI clock. `25000000` is the SCT2024 maximum and is used in the example. |
-| `brightness` | `100%` | Global scale applied to pixel values before BAM. `10%` is a comfortable test level. |
+| `brightness` | `100%` | Initial global brightness. `10%` is a comfortable test level. |
 | `update_interval` | `1s` | How often the display lambda is rendered and re-encoded. |
 
 Grayscale comes from the **white** channel of `Color`. RGB colors are converted
@@ -120,23 +118,27 @@ provides an action:
 - frekvens.set_brightness: 20%
 ```
 
-Brightness is applied to the pixel values, so it does not change the panel
-refresh rate. The optional `enable_pin` is only a power gate; it is not used for
-dimming.
+With `enable_output` (the example uses `ledc` on GPIO26 at 20 kHz), brightness is
+applied as **PWM on the SCT2024 OE pin**. This keeps the full 7-bit BAM grayscale
+(128 levels) at any brightness; the panel refresh rate is unchanged. Without
+`enable_output`, brightness is applied to the pixel values before BAM, which
+reduces the number of gray levels at low brightness (e.g. about 14 levels at
+10 %).
+
+The `enable_pin` option is only a simple power gate; it is not used for dimming.
 
 ### Demo animations
 
 `frekvens.yaml` includes a `select.frekvens_animation` dropdown with **Auto
 demo**, **Plasma**, **Ripple**, **Fire**, **Matrix rain**, **Lissajous**,
-**Spiral**, **Warp starfield**, **Column scan**, **Row scan** and **Off**, plus
-an **Animation Speed** number. All animation logic lives in the YAML lambda; the
+**Spiral**, **Warp starfield**, **Column scan**, **Row scan**, **Top-left
+pixel** and **Off**, plus an **Animation Speed** number. All animation logic lives in the YAML lambda; the
 component only exposes the display. Auto demo cycles through the decorative
 animations every eight seconds.
 
-**Column scan** and **Row scan** are mapping diagnostics: they light one physical
-column left-to-right, or one physical row top-to-bottom, about every 0.5 s at
-100 % speed. Use them to check the default orientation and the shift-register
-column order.
+**Column scan** and **Row scan** are mapping diagnostics: they light one logical
+column left-to-right, or one logical row top-to-bottom, about every 0.5 s at
+100 % speed. Use them to check the shift-register mapping and orientation.
 
 The display updates at `update_interval: 33ms` (about 30 fps) while the panel
 still refreshes its BAM frames at ~78 Hz independently.
