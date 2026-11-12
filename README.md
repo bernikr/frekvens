@@ -54,10 +54,11 @@ preempt a cache-off flash operation, which trips the task watchdog. The
 
 The panel's 16 shift-register words are wired as **2-row × 8-column blocks**
 (four 8×8 quadrants). Each word drives two rows of one 8-column half, and the two
-8-column halves of a logical row live in different words. The component uses the
-original mapping from the working black/white driver; the logical display is
-16×16 and upright by default. The standard `rotation:` option can still be used
-for additional adjustments.
+8-column halves of a logical row live in different words. The component maps
+them with sequential rows and the left half first; this was verified on the real
+panel with the column/row scans and the top-left pixel test. The logical display
+is 16×16 and upright by default. The standard `rotation:` option can still be
+used for additional adjustments.
 
 ## Configuration
 
