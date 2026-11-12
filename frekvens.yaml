@@ -1,31 +1,41 @@
 esphome:
   name: frekvens
-  platformio_options:
-    lib_deps:
-      - Wire                            # Also required by GFX.
-      - SPI                             # Also required by GFX.
-      - adafruit/Adafruit BusIO         # Required by GFX Library.
-      - adafruit/Adafruit GFX Library   # Required for FrekvensPanel.
-      - me-no-dev/ESPAsyncTCP
+  friendly_name: Frekvens
 
 esp32:
   board: az-delivery-devkit-v4
+  framework:
+    type: esp-idf
 
-external_components:
-  - source: github://nagyrobi/esphome-ikea-led-matrix@master
-    components: [ frekvens_panel ]
-
-# Enable logging
 logger:
+  level: INFO
 
-# Enable Home Assistant API
 api:
   encryption:
-    key: "vV6/h0AjePuR0fG3NbF2Bc+iL6xzbYyGUje4xFiLCRk="
+    key: !secret frekvens__encryption_key
 
 ota:
-  platform: esphome
-  password: !secret ota_password
+  - platform: esphome
+    password: !secret frekvens__ota_password
+    # The panel runs a high-priority task and a hardware timer. Stop both while
+    # the OTA backend writes flash, otherwise the task can preempt a cache-off
+    # flash operation and trip the task watchdog.
+    on_begin:
+      - lambda: |-
+          id(frekvens_panel).suspend();
+    on_abort:
+      - lambda: |-
+          id(frekvens_panel).resume();
+    on_error:
+      - lambda: |-
+          id(frekvens_panel).resume();
+    on_end:
+      - lambda: |-
+          id(frekvens_panel).resume();
+
+button:
+  - platform: safe_mode
+    name: Safe Mode
 
 wifi:
   ssid: !secret wifi_ssid
@@ -33,36 +43,45 @@ wifi:
   fast_connect: true
   domain: .lan
 
-esp32_ble_tracker:
-bluetooth_proxy:
-  active: True
-
-####################
-
-output:
-  - platform: ledc
-    pin:
-      number: 26
-      inverted: True
-    id: enable
-
-light:
-  - platform: monochromatic
-    output: enable
-    id: enable_light
-    name: Led Matrix
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [frekvens]
 
 display:
-  - platform: frekvens_panel
-    data_pin: 27
-    clock_pin: 14
-    latch_pin: 19
-#    id: led_matrix_display
-#    #update_interval: 16ms
-#    pages:
-#      - id: p_text
-#        lambda: |-
-#          it.print(id(coords), -2, id(default_font), COLOR_ON, id(scroll_text).state.c_str());
-      #- id: p_loading
-      #  lambda: |-
-      #    it.image(0, 0, id(gif_loading), COLOR_ON, COLOR_OFF);
+  - platform: frekvens
+    id: frekvens_panel
+    data_pin: GPIO27
+    clock_pin: GPIO14
+    latch_pin: GPIO19
+    enable_pin: GPIO26
+    clock_speed: 25000000
+    # Boot with the panel off; the Brightness number controls it at runtime.
+    # Brightness is applied to the pixel values before BAM, so the refresh rate
+    # stays constant.
+    brightness: 0%
+    update_interval: 33ms
+    lambda: |-
+      // Soft diagonal grayscale gradient. Replace this lambda with your own
+      // drawing code; Color(0, 0, 0, v) is the 8-bit grayscale value.
+      for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+          it.draw_pixel_at(x, y, Color(0, 0, 0, (x + y) * 255 / 30));
+        }
+      }
+
+number:
+  - platform: template
+    name: Brightness
+    id: frekvens_brightness
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: "%"
+    set_action:
+      - lambda: |-
+          id(frekvens_panel).set_brightness(x / 100.0f);
