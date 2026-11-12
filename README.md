@@ -128,9 +128,15 @@ dimming.
 
 `frekvens.yaml` includes a `select.frekvens_animation` dropdown with **Auto
 demo**, **Plasma**, **Ripple**, **Fire**, **Matrix rain**, **Lissajous**,
-**Spiral**, **Warp starfield** and **Off**, plus an **Animation Speed** number.
-All animation logic lives in the YAML lambda; the component only exposes the
-display. Auto demo cycles through the animations every eight seconds.
+**Spiral**, **Warp starfield**, **Column scan**, **Row scan** and **Off**, plus
+an **Animation Speed** number. All animation logic lives in the YAML lambda; the
+component only exposes the display. Auto demo cycles through the decorative
+animations every eight seconds.
+
+**Column scan** and **Row scan** are mapping diagnostics: they light one physical
+column left-to-right, or one physical row top-to-bottom, about every 0.5 s at
+100 % speed. Use them to check the default orientation and the shift-register
+column order.
 
 The display updates at `update_interval: 33ms` (about 30 fps) while the panel
 still refreshes its BAM frames at ~78 Hz independently.
