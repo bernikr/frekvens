@@ -336,8 +336,14 @@ void FrekvensDisplay::encode_frame_() {
         continue;
       }
 
-      const uint8_t word = COLUMN_ORDER[x];
-      const uint8_t bit = static_cast<uint8_t>(y);
+      // The panel is mounted on its feet, so the default orientation rotates
+      // the logical image 90 degrees clockwise. Display coordinates remain the
+      // standard top-left origin; the ESPHome `rotation:` option can still be
+      // used for additional adjustments.
+      const int physical_x = PANEL_SIZE - 1 - y;
+      const int physical_y = x;
+      const uint8_t word = COLUMN_ORDER[physical_x];
+      const uint8_t bit = static_cast<uint8_t>(physical_y);
       const uint16_t pixel_mask = static_cast<uint16_t>(1u << bit);
       for (int plane = 0; plane < BAM_BITS; plane++) {
         if (value & (1u << plane)) {

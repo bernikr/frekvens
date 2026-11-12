@@ -57,8 +57,10 @@ The panel is wired **per column**: each of the 16 SCT2024 drivers drives one
 order is interleaved in adjacent pairs, so the component uses the measured
 left-to-right column order `7, 15, 6, 14, 5, 13, 4, 12, 3, 11, 2, 10, 1, 9, 0, 8`.
 This is different from the old quadrant/row-based mapping, which produced a
-half-swapped image. The logical display is 16×16; the physical orientation can be
-changed with the standard `rotation:` option.
+half-swapped image. The default orientation assumes the panel is **standing on
+its feet** and applies a **90° clockwise** rotation in the mapping. The logical
+display is 16×16; the standard `rotation:` option can still be used for
+additional adjustments.
 
 ## Configuration
 
