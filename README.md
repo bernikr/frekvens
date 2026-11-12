@@ -89,6 +89,10 @@ display:
       }
 ```
 
+When using this repository as a published external component instead of a local
+checkout, use `source: github://bernikr/frekvens@main` (with
+`components: [frekvens]`).
+
 Options:
 
 | Option | Default | Description |
@@ -117,6 +121,17 @@ provides an action:
 Brightness is applied to the pixel values, so it does not change the panel
 refresh rate. The optional `enable_pin` is only a power gate; it is not used for
 dimming.
+
+### Demo animations
+
+`frekvens.yaml` includes a `select.frekvens_animation` dropdown with **Auto
+demo**, **Plasma**, **Ripple**, **Fire**, **Matrix rain**, **Lissajous**,
+**Spiral**, **Warp starfield** and **Off**, plus an **Animation Speed** number.
+All animation logic lives in the YAML lambda; the component only exposes the
+display. Auto demo cycles through the animations every eight seconds.
+
+The display updates at `update_interval: 33ms` (about 30 fps) while the panel
+still refreshes its BAM frames at ~78 Hz independently.
 
 ## Build and flash
 

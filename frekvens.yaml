@@ -70,15 +70,155 @@ display:
     brightness: 0%
     update_interval: 33ms
     lambda: |-
-      // Soft diagonal grayscale gradient. Replace this lambda with your own
-      // drawing code; Color(0, 0, 0, v) is the 8-bit grayscale value.
-      for (int y = 0; y < 16; y++) {
-        for (int x = 0; x < 16; x++) {
-          it.draw_pixel_at(x, y, Color(0, 0, 0, (x + y) * 255 / 30));
-        }
+      const float PI = 3.14159265f;
+      const float speed = id(animation_speed).state / 100.0f;
+      const float t = millis() / 1000.0f * speed;
+      const float cx = 7.5f;
+      const float cy = 7.5f;
+
+      auto mode = id(animation).active_index();
+      int anim = mode.has_value() ? static_cast<int>(mode.value()) : 1;
+      if (anim == 1) {
+        // Auto demo: cycle through the animations every 8 seconds.
+        anim = 2 + (static_cast<int>(t / 8.0f) % 7);
       }
 
+      switch (anim) {
+        case 2:  // Plasma
+          for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+              float fx = x - cx;
+              float fy = y - cy;
+              float v = sinf(fx * 0.55f + t * 1.7f) + sinf(fy * 0.55f - t * 1.3f) +
+                        sinf((fx + fy) * 0.40f + t * 0.9f) +
+                        sinf(sqrtf(fx * fx + fy * fy) * 0.80f - t * 2.1f);
+              v = (v + 4.0f) * 0.125f;
+              it.draw_pixel_at(x, y, Color(0, 0, 0, static_cast<uint8_t>(v * 255.0f)));
+            }
+          }
+          break;
+
+        case 3:  // Ripple
+          for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+              float fx = x - cx;
+              float fy = y - cy;
+              float d = sqrtf(fx * fx + fy * fy);
+              float v = 0.5f + 0.5f * sinf(d * 1.35f - t * 4.0f);
+              v = v * v;
+              it.draw_pixel_at(x, y, Color(0, 0, 0, static_cast<uint8_t>(v * 255.0f)));
+            }
+          }
+          break;
+
+        case 4:  // Fire
+          for (int x = 0; x < 16; x++) {
+            float base = 0.60f + 0.30f * sinf(t * 2.3f + x * 0.9f) +
+                         0.10f * sinf(t * 5.1f + x * 2.7f);
+            for (int y = 0; y < 16; y++) {
+              float heat = base * (1.0f - y / 16.0f);
+              float flicker = 0.13f * sinf(t * 13.0f + x * 4.1f + y * 7.3f);
+              float v = heat + flicker;
+              v = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+              it.draw_pixel_at(x, y, Color(0, 0, 0, static_cast<uint8_t>(v * 255.0f)));
+            }
+          }
+          break;
+
+        case 5:  // Matrix rain
+          for (int x = 0; x < 16; x++) {
+            float speed_x = 1.7f + 1.1f * sinf(x * 1.7f);
+            int head = static_cast<int>(fmodf(t * speed_x + x * 3.1f, 20.0f)) - 2;
+            for (int y = 0; y < 16; y++) {
+              int d = head - y;
+              float v = 0.0f;
+              if (d == 0) {
+                v = 1.0f;
+              } else if (d > 0 && d < 5) {
+                v = 1.0f - d * 0.22f;
+              }
+              it.draw_pixel_at(x, y, Color(0, 0, 0, static_cast<uint8_t>(v * 255.0f)));
+            }
+          }
+          break;
+
+        case 6:  // Lissajous threads
+          for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+              float v = 0.0f;
+              for (int k = 0; k < 3; k++) {
+                float bx = cx + 7.0f * sinf(t * (1.1f + 0.27f * k) + k * 2.1f);
+                float by = cy + 7.0f * sinf(t * (1.7f + 0.19f * k) + k * 1.3f);
+                float d = sqrtf((x - bx) * (x - bx) + (y - by) * (y - by));
+                float g = 1.0f - d / 3.0f;
+                if (g > v) v = g;
+              }
+              it.draw_pixel_at(x, y, Color(0, 0, 0, static_cast<uint8_t>(v * 255.0f)));
+            }
+          }
+          break;
+
+        case 7:  // Spiral
+          for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+              float fx = x - cx;
+              float fy = y - cy;
+              float angle = atan2f(fy, fx);
+              float r = sqrtf(fx * fx + fy * fy);
+              float v = 0.5f + 0.5f * sinf(angle * 3.0f + r * 1.45f - t * 3.2f);
+              v = v * v * v;
+              it.draw_pixel_at(x, y, Color(0, 0, 0, static_cast<uint8_t>(v * 255.0f)));
+            }
+          }
+          break;
+
+        case 8:  // Warp starfield
+          for (int i = 0; i < 28; i++) {
+            float angle = i * 2.399963f;
+            float z = 1.0f - fmodf(t * 0.11f + i * 0.0713f, 1.0f);
+            float scale = 0.16f / (z + 0.06f);
+            int sx = static_cast<int>(cx + cosf(angle) * scale * 10.0f);
+            int sy = static_cast<int>(cy + sinf(angle) * scale * 10.0f);
+            if (sx >= 0 && sx < 16 && sy >= 0 && sy < 16) {
+              float v = 1.0f - z;
+              it.draw_pixel_at(sx, sy, Color(0, 0, 0, static_cast<uint8_t>(v * 255.0f)));
+            }
+          }
+          break;
+
+        default:  // Off
+          break;
+      }
+
+select:
+  - platform: template
+    name: Animation
+    id: animation
+    optimistic: true
+    restore_value: true
+    initial_option: Auto demo
+    options:
+      - "Off"
+      - "Auto demo"
+      - "Plasma"
+      - "Ripple"
+      - "Fire"
+      - "Matrix rain"
+      - "Lissajous"
+      - "Spiral"
+      - "Warp starfield"
+
 number:
+  - platform: template
+    name: Animation Speed
+    id: animation_speed
+    min_value: 20
+    max_value: 300
+    step: 5
+    initial_value: 100
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: "%"
   - platform: template
     name: Brightness
     id: frekvens_brightness
