@@ -1,6 +1,13 @@
 esphome:
   name: frekvens
   friendly_name: Frekvens
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          // The template number restores its value without calling set_action;
+          // apply the restored level to the panel once everything is set up.
+          id(frekvens_panel).set_brightness(id(frekvens_brightness).state / 100.0f);
 
 esp32:
   board: az-delivery-devkit-v4
